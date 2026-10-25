@@ -1,0 +1,1 @@
+# my-scaner-app-macos

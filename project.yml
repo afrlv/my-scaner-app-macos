@@ -1,0 +1,59 @@
+name: AfrlvScaner
+options:
+  bundleIdPrefix: com.afrlv
+  developmentLanguage: ru
+  deploymentTarget:
+    macOS: "14.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+    DEVELOPMENT_TEAM: ""
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+targets:
+  AfrlvScaner:
+    type: application
+    platform: macOS
+    sources:
+      - AfrlvScaner
+    info:
+      path: AfrlvScaner/Info.plist
+      properties:
+        CFBundleDisplayName: AfrlvScaner
+        CFBundleDevelopmentRegion: ru
+        LSApplicationCategoryType: public.app-category.productivity
+        NSLocalNetworkUsageDescription: Приложению нужен доступ к локальной сети для поиска сетевых сканеров.
+        NSBonjourServices:
+          - _uscan._tcp
+          - _uscans._tcp
+          - _scanner._tcp
+          - _ipp._tcp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.afrlv.AfrlvScaner
+        GENERATE_INFOPLIST_FILE: NO
+        ENABLE_HARDENED_RUNTIME: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+  AfrlvScanerTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - AfrlvScanerTests
+    dependencies:
+      - target: AfrlvScaner
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.afrlv.AfrlvScanerTests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/AfrlvScaner.app/Contents/MacOS/AfrlvScaner
+        BUNDLE_LOADER: $(TEST_HOST)
+schemes:
+  AfrlvScaner:
+    build:
+      targets:
+        AfrlvScaner: all
+    test:
+      targets:
+        - AfrlvScanerTests

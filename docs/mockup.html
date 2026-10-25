@@ -1,0 +1,320 @@
+<title>AfrlvScaner — главный экран</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: one macOS window — toolbar on top, preview glass in the center, page strip + save at the bottom; notes under the window. */
+:root {
+  --page: #e9ebef;
+  --win: #f6f7f9;
+  --bar: #eceef2;
+  --line: #d4d8df;
+  --fg: #1d2129;
+  --muted: #6a7180;
+  --accent: #0a6cff;
+  --accent-soft: rgba(10,108,255,.14);
+  --glass: #2b2f36;
+  --paper: #fbfaf7;
+  --ink: #9aa1ad;
+  --ctl: #ffffff;
+  --ok: #1f9d55;
+  --sys: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --page: #15171b; --win: #1f2227; --bar: #282b31; --line: #3a3e46; --fg: #e8eaee; --muted: #9aa1ad;
+  --accent: #3d8bff; --accent-soft: rgba(61,139,255,.2); --glass: #0e1013; --paper: #e9e7e1; --ink: #8e95a1; --ctl: #33373e; --ok: #3cc677; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --page: #15171b; --win: #1f2227; --bar: #282b31; --line: #3a3e46; --fg: #e8eaee; --muted: #9aa1ad;
+  --accent: #3d8bff; --accent-soft: rgba(61,139,255,.2); --glass: #0e1013; --paper: #e9e7e1; --ink: #8e95a1; --ctl: #33373e; --ok: #3cc677; color-scheme: dark }
+
+body { background: var(--page); color: var(--fg); font-family: var(--sys); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 40px; }
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 24px; }
+header h1 { font-size: 22px; margin: 0 0 4px; text-wrap: balance; }
+header p { margin: 0; color: var(--muted); max-width: 70ch; line-height: 1.5; }
+
+.scroller { overflow-x: auto; border-radius: 12px; }
+.win { min-width: 860px; background: var(--win); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: 0 18px 50px rgba(0,0,0,.18); display: grid; grid-template-rows: auto 1fr auto auto; height: 640px; user-select: none; }
+
+/* toolbar */
+.tb { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--bar); border-bottom: 1px solid var(--line); }
+.lights { display: flex; gap: 7px; margin-right: 6px; }
+.lights i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+.lights i:nth-child(1){background:#ff5f57}.lights i:nth-child(2){background:#febc2e}.lights i:nth-child(3){background:#28c840}
+select, .seg button, .btn { font: 13px var(--sys); color: var(--fg); }
+select { background: var(--ctl); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; height: 26px; }
+.seg { display: inline-flex; background: var(--ctl); border: 1px solid var(--line); border-radius: 7px; padding: 2px; gap: 2px; }
+.seg button { border: 0; background: transparent; border-radius: 5px; padding: 3px 10px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.btn { border: 1px solid var(--line); background: var(--ctl); border-radius: 6px; padding: 4px 12px; height: 26px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.btn:focus-visible, .seg button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sp { flex: 1; }
+kbd { font: 11px var(--mono); color: var(--muted); }
+.btn.primary kbd { color: rgba(255,255,255,.75); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); display: inline-block; }
+
+/* stage */
+.stage { position: relative; display: grid; place-items: center; padding: 18px; background: var(--win); min-height: 0; }
+.glass { position: relative; height: 100%; aspect-ratio: 216 / 297; background: var(--glass); border-radius: 3px; overflow: hidden; cursor: crosshair; }
+.glass svg { position: absolute; inset: 0; width: 100%; height: 100%; transition: filter .4s; }
+.glass.stale svg { filter: blur(3px) grayscale(1); opacity: .35; }
+.scanline { position: absolute; left: 0; right: 0; height: 2px; background: var(--accent); box-shadow: 0 0 12px var(--accent); top: 0; display: none; }
+.glass.scanning .scanline { display: block; animation: sweep 1.6s linear forwards; }
+@keyframes sweep { to { top: 100%; } }
+.shade { position: absolute; inset: 0; pointer-events: none; }
+.rgn { position: absolute; border: 1.5px solid var(--accent); background: var(--accent-soft); cursor: move; }
+.rgn.sel { border-width: 2px; }
+.rgn .tag { position: absolute; left: -1px; top: -20px; font: 11px var(--mono); background: var(--accent); color: #fff; padding: 2px 6px; border-radius: 3px 3px 0 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rgn .x { position: absolute; right: -9px; top: -9px; width: 18px; height: 18px; border-radius: 50%; background: var(--fg); color: var(--win); font: 12px/18px var(--sys); text-align: center; cursor: pointer; display: none; }
+.rgn.sel .x { display: block; }
+.h { position: absolute; width: 9px; height: 9px; background: #fff; border: 1.5px solid var(--accent); border-radius: 2px; display: none; }
+.rgn.sel .h { display: block; }
+.h[data-d="nw"]{left:-5px;top:-5px;cursor:nwse-resize}.h[data-d="ne"]{right:-5px;top:-5px;cursor:nesw-resize}
+.h[data-d="sw"]{left:-5px;bottom:-5px;cursor:nesw-resize}.h[data-d="se"]{right:-5px;bottom:-5px;cursor:nwse-resize}
+.h[data-d="n"]{left:calc(50% - 5px);top:-5px;cursor:ns-resize}.h[data-d="s"]{left:calc(50% - 5px);bottom:-5px;cursor:ns-resize}
+.h[data-d="w"]{top:calc(50% - 5px);left:-5px;cursor:ew-resize}.h[data-d="e"]{top:calc(50% - 5px);right:-5px;cursor:ew-resize}
+.hint { position: absolute; left: 18px; bottom: 14px; font-size: 12px; color: var(--muted); max-width: 200px; line-height: 1.45; }
+.side { position: absolute; right: 18px; top: 18px; width: 210px; display: grid; gap: 8px; font-size: 12px; }
+.side .card { background: var(--bar); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; }
+.side .row { display: flex; justify-content: space-between; gap: 8px; }
+.side .row span:last-child { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.side .lbl { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+
+/* strip */
+.strip { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--line); background: var(--bar); min-height: 92px; }
+.thumbs { display: flex; gap: 8px; overflow-x: auto; flex: 1; min-width: 0; padding: 2px; }
+.th { flex: none; width: 52px; height: 68px; background: var(--paper); border: 1px solid var(--line); border-radius: 3px; position: relative; display: grid; place-items: center; font: 10px var(--mono); color: #6a7180; cursor: grab; }
+.th.photo { background: linear-gradient(160deg,#c9a86a,#7b5a3a 60%,#3e4b5a); color: #fff; }
+.th b { position: absolute; bottom: 3px; right: 4px; font-weight: 500; }
+.th.new { animation: pop .35s ease-out; }
+@keyframes pop { from { transform: scale(.6); opacity: 0; } }
+.empty { color: var(--muted); font-size: 12px; }
+.save { display: flex; align-items: center; gap: 8px; }
+
+/* status */
+.status { display: flex; gap: 16px; padding: 5px 14px; font: 11px var(--mono); color: var(--muted); border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.status .sp { flex: 1; }
+
+/* notes */
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px 28px; }
+.notes section { min-width: 0; }
+.notes h2 { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+.notes ul { margin: 0; padding-left: 18px; line-height: 1.55; font-size: 13.5px; display: grid; gap: 4px; }
+@media (prefers-reduced-motion: reduce) { .glass.scanning .scanline, .th.new { animation: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>AfrlvScaner: главный экран</h1>
+    <p>Интерактивный эскиз. Чтобы добавить область, растяните рамку на стекле. Выделенную область можно перетащить или изменить за ручки, удалить кнопкой × или клавишей ⌫. Кнопки «Превью», «Авто» и «Сканировать» работают в демо-режиме.</p>
+  </header>
+
+  <div class="scroller">
+    <div class="win" id="win">
+      <div class="tb">
+        <div class="lights"><i></i><i></i><i></i></div>
+        <span class="dot" title="Сканер готов"></span>
+        <select id="scanner" aria-label="Сканер">
+          <option>Deli M1820W</option>
+          <option>Samsung SCX-3200 (нет драйвера)</option>
+        </select>
+        <div class="seg" id="mode" role="group" aria-label="Режим">
+          <button aria-pressed="true">Цвет</button><button aria-pressed="false">Серый</button><button aria-pressed="false">Ч/Б</button>
+        </div>
+        <select id="dpi" aria-label="Разрешение">
+          <option>150 dpi</option><option selected>300 dpi</option><option>600 dpi</option><option>1200 dpi</option>
+        </select>
+        <span class="sp"></span>
+        <button class="btn" id="bPrev">Превью <kbd>⌘P</kbd></button>
+        <button class="btn" id="bAuto">Авто <kbd>⌘A</kbd></button>
+        <button class="btn primary" id="bScan">Сканировать <kbd>⌘↩</kbd></button>
+      </div>
+
+      <div class="stage">
+        <div class="glass" id="glass">
+          <svg viewBox="0 0 216 297" preserveAspectRatio="none" aria-hidden="true">
+            <g transform="rotate(-1.2 70 75)">
+              <rect x="14" y="12" width="120" height="160" fill="var(--paper)"/>
+              <rect x="26" y="26" width="60" height="5" fill="var(--ink)"/>
+              <g fill="var(--ink)" opacity=".6">
+                <rect x="26" y="40" width="96" height="2"/><rect x="26" y="46" width="92" height="2"/><rect x="26" y="52" width="96" height="2"/>
+                <rect x="26" y="58" width="80" height="2"/><rect x="26" y="68" width="96" height="2"/><rect x="26" y="74" width="90" height="2"/>
+                <rect x="26" y="80" width="96" height="2"/><rect x="26" y="86" width="60" height="2"/><rect x="26" y="96" width="96" height="2"/>
+                <rect x="26" y="102" width="94" height="2"/><rect x="26" y="108" width="70" height="2"/>
+                <rect x="90" y="150" width="32" height="2"/><rect x="26" y="150" width="30" height="2"/>
+              </g>
+            </g>
+            <g transform="rotate(2 170 230)">
+              <rect x="122" y="196" width="78" height="56" fill="#f2f0ea"/>
+              <defs><linearGradient id="ph" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#d9b77a"/><stop offset=".55" stop-color="#7b5a3a"/><stop offset="1" stop-color="#3e4b5a"/></linearGradient></defs>
+              <rect x="126" y="200" width="70" height="48" fill="url(#ph)"/>
+            </g>
+          </svg>
+          <div class="scanline"></div>
+          <div id="rgns"></div>
+        </div>
+        <div class="hint">Стекло 216 × 297 мм. Превью делается на минимальном разрешении сканера (75 dpi).</div>
+        <div class="side">
+          <div class="card">
+            <span class="lbl">Области</span>
+            <div id="rlist"></div>
+          </div>
+          <div class="card">
+            <span class="lbl">Итог скана</span>
+            <div class="row"><span>Проход</span><span id="pass">—</span></div>
+            <div class="row"><span>Размер</span><span id="px">—</span></div>
+            <div class="row"><span>Оценка</span><span id="eta">—</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="strip">
+        <div class="thumbs" id="thumbs"><span class="empty" id="empty">Готовые страницы появятся здесь. Порядок меняется перетаскиванием, удалить можно клавишей ⌫, повернуть — клавишей R.</span></div>
+        <div class="save">
+          <div class="seg" id="fmt" role="group" aria-label="Формат">
+            <button aria-pressed="true">PDF</button><button aria-pressed="false">JPEG</button>
+          </div>
+          <div class="seg" id="split" role="group" aria-label="Несколько областей">
+            <button aria-pressed="true">Один файл</button><button aria-pressed="false">Каждая отдельно</button>
+          </div>
+          <button class="btn primary" id="bSave">Сохранить <kbd>⌘S</kbd></button>
+        </div>
+      </div>
+
+      <div class="status">
+        <span id="st">Deli M1820W · AirScan · готов</span>
+        <span class="sp"></span>
+        <span>→ ~/Documents/Scans/scan_2026-10-22_<span id="tm">121530</span>.pdf</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <section>
+      <h2>Один экран</h2>
+      <ul>
+        <li>Нет диалогов и вспомогательных окон. Настройки скана умещаются в тулбаре в одну строку.</li>
+        <li>Сохранение работает без диалога: файл ложится в папку по умолчанию с автоименем, путь показан в статусной строке.</li>
+        <li>Папка меняется в стандартном меню «Настройки» (⌘,), это единственное исключение.</li>
+      </ul>
+    </section>
+    <section>
+      <h2>Быстродействие</h2>
+      <ul>
+        <li>Сессия со сканером открывается при запуске и не закрывается. Превью стартует без повторного подключения.</li>
+        <li>Если областей несколько, сканер делает один проход по их общему габариту, а области вырезаются уже на Mac.</li>
+        <li>Превью рисуется по полосам по мере прихода данных. Автопоиск областей на 75 dpi занимает около 50 мс.</li>
+        <li>После смены сканера или режима старое превью тускнеет, но остаётся на экране, и рамки можно править сразу.</li>
+      </ul>
+    </section>
+    <section>
+      <h2>Минимум элементов</h2>
+      <ul>
+        <li>Тулбар: сканер, режим, DPI и три действия. У каждого есть горячая клавиша.</li>
+        <li>Если областей нет, сканируется всё стекло. Для одной или нескольких областей отдельных режимов нет.</li>
+        <li>Справа сводка, которая только показывает данные: размеры областей в мм, итоговый размер в пикселях и время скана.</li>
+      </ul>
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+  const W = 216, H = 297; // мм стекла
+  const glass = document.getElementById('glass'), box = document.getElementById('rgns');
+  let regions = [{x:12,y:10,w:126,h:166},{x:120,y:192,w:84,h:64}], sel = 0, pages = 0;
+
+  const dpi = () => parseInt(document.getElementById('dpi').value);
+  const mm2px = (mm) => Math.round(mm / 25.4 * dpi());
+
+  function render() {
+    box.innerHTML = '';
+    regions.forEach((r, i) => {
+      const d = document.createElement('div');
+      d.className = 'rgn' + (i === sel ? ' sel' : '');
+      Object.assign(d.style, {left: r.x/W*100+'%', top: r.y/H*100+'%', width: r.w/W*100+'%', height: r.h/H*100+'%'});
+      d.innerHTML = `<span class="tag">${i+1} · ${Math.round(r.w)}×${Math.round(r.h)} мм</span><span class="x" title="Удалить">×</span>` +
+        ['nw','n','ne','e','se','s','sw','w'].map(k => `<span class="h" data-d="${k}"></span>`).join('');
+      d.dataset.i = i;
+      box.appendChild(d);
+    });
+    const list = document.getElementById('rlist');
+    list.innerHTML = regions.length ? regions.map((r,i)=>`<div class="row"><span>${i+1}</span><span>${Math.round(r.w)}×${Math.round(r.h)} мм</span></div>`).join('')
+      : '<div class="row"><span>Всё стекло</span><span>216×297 мм</span></div>';
+    const u = regions.length ? regions.reduce((a,r)=>({x0:Math.min(a.x0,r.x),y0:Math.min(a.y0,r.y),x1:Math.max(a.x1,r.x+r.w),y1:Math.max(a.y1,r.y+r.h)}),{x0:1e9,y0:1e9,x1:0,y1:0}) : {x0:0,y0:0,x1:W,y1:H};
+    document.getElementById('pass').textContent = `1 · ${Math.round(u.x1-u.x0)}×${Math.round(u.y1-u.y0)} мм`;
+    document.getElementById('px').textContent = `${mm2px(u.x1-u.x0)}×${mm2px(u.y1-u.y0)}`;
+    const sec = Math.max(3, Math.round((u.y1-u.y0)/297 * dpi()/300 * 14));
+    document.getElementById('eta').textContent = `≈ ${sec} с`;
+  }
+
+  const pt = (e) => { const b = glass.getBoundingClientRect(); return {x: Math.max(0,Math.min(W,(e.clientX-b.left)/b.width*W)), y: Math.max(0,Math.min(H,(e.clientY-b.top)/b.height*H))}; };
+  let drag = null;
+  glass.addEventListener('pointerdown', e => {
+    const p = pt(e), t = e.target;
+    if (t.classList.contains('x')) { regions.splice(+t.parentNode.dataset.i,1); sel = -1; render(); return; }
+    const rg = t.closest('.rgn');
+    if (rg) {
+      sel = +rg.dataset.i; const r = {...regions[sel]};
+      drag = {mode: t.dataset.d || 'move', p, r};
+    } else {
+      regions.push({x:p.x,y:p.y,w:0,h:0}); sel = regions.length-1;
+      drag = {mode:'se', p, r:{x:p.x,y:p.y,w:0,h:0}, fresh:true};
+    }
+    glass.setPointerCapture(e.pointerId); render();
+  });
+  glass.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const p = pt(e), dx = p.x-drag.p.x, dy = p.y-drag.p.y, o = drag.r; let {x,y,w,h} = o;
+    if (drag.mode === 'move') { x = Math.max(0,Math.min(W-w,o.x+dx)); y = Math.max(0,Math.min(H-h,o.y+dy)); }
+    else {
+      if (drag.mode.includes('e')) w = o.w+dx;
+      if (drag.mode.includes('s')) h = o.h+dy;
+      if (drag.mode.includes('w')) { x = o.x+dx; w = o.w-dx; }
+      if (drag.mode.includes('n')) { y = o.y+dy; h = o.h-dy; }
+      if (w < 0) { x += w; w = -w; } if (h < 0) { y += h; h = -h; }
+    }
+    regions[sel] = {x,y,w,h}; render();
+  });
+  glass.addEventListener('pointerup', () => {
+    if (drag?.fresh && (regions[sel].w < 4 || regions[sel].h < 4)) { regions.splice(sel,1); sel = -1; }
+    drag = null; render();
+  });
+  document.addEventListener('keydown', e => {
+    if ((e.key === 'Backspace' || e.key === 'Delete') && sel >= 0 && document.activeElement.tagName !== 'SELECT') { regions.splice(sel,1); sel = -1; render(); e.preventDefault(); }
+  });
+
+  document.querySelectorAll('.seg').forEach(g => g.addEventListener('click', e => {
+    if (e.target.tagName !== 'BUTTON') return;
+    g.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b === e.target));
+    if (g.id === 'mode') glass.classList.add('stale');
+    if (g.id === 'fmt') document.querySelector('.status span:nth-child(3)').lastChild.textContent = e.target.textContent === 'PDF' ? '.pdf' : '.jpg';
+  }));
+  document.getElementById('dpi').addEventListener('change', render);
+  document.getElementById('scanner').addEventListener('change', () => glass.classList.add('stale'));
+
+  const st = document.getElementById('st');
+  document.getElementById('bPrev').onclick = () => {
+    glass.classList.remove('scanning'); void glass.offsetWidth; glass.classList.add('scanning');
+    st.textContent = 'Превью · 75 dpi …';
+    setTimeout(() => { glass.classList.remove('scanning','stale'); st.textContent = 'Deli M1820W · превью готово за 2,1 с'; }, 1650);
+  };
+  document.getElementById('bAuto').onclick = () => {
+    regions = [{x:12,y:10,w:126,h:166},{x:120,y:192,w:84,h:64}]; sel = -1; render();
+    st.textContent = 'Найдено объектов: 2 (лист и фото)';
+  };
+  document.getElementById('bScan').onclick = () => {
+    const th = document.getElementById('thumbs'); document.getElementById('empty')?.remove();
+    const items = regions.length ? regions : [{w:W,h:H}];
+    items.forEach((r) => {
+      pages++; const d = document.createElement('div');
+      d.className = 'th new' + (r.w < 100 && r.h < 100 ? ' photo' : ''); d.innerHTML = `<b>${pages}</b>`; th.appendChild(d);
+    });
+    th.scrollLeft = th.scrollWidth;
+    st.textContent = `Скан ${dpi()} dpi · один проход · страниц в сессии: ${pages}`;
+  };
+  document.getElementById('bSave').onclick = () => {
+    st.textContent = pages ? `Сохранено: ${pages} стр. → ~/Documents/Scans` : 'Нечего сохранять: сначала отсканируйте страницу';
+  };
+  render();
+})();
+</script>

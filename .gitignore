@@ -60,3 +60,14 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# AfrlvScaner
+.venv/
+.idea/
+.DS_Store
+build/
+DerivedData/
+*.xcodeproj/
+xcuserdata/
+AfrlvScaner/Info.plist
+dist/
